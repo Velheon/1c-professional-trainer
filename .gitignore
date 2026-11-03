@@ -1,0 +1,17 @@
+# Приватный банк: никогда не публиковать
+*.zip
+/platform_83/
+/private/
+/reports/
+*.local
+.env*
+!.env.example
+# Локальные инструменты и сборка
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.cache/
+test-results/
+playwright-report/

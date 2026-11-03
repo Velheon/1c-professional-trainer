@@ -1,0 +1,11 @@
+# Reproducible local reference for the personal app's Auth policy.
+# The hosted project is configured in Dashboard; do not blindly push unrelated defaults.
+project_id = "1c-professional-trainer"
+
+[auth]
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = true
