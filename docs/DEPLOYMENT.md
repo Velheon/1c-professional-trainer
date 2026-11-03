@@ -65,13 +65,13 @@ Vite preview не моделирует применение `_headers`.
    После обновления история/сессия сохранены; браузерная консоль не содержит
    CSP-ошибок. Проверьте заголовки `index.html` и `sw.js` в Network.
 
-На 03.11.2026 этот пакет подготовлен локально. Реального деплоя и аккаунта
-хостинга пока нет; сетевой адрес не создан.
+Первоначально пакет был подготовлен для Cloudflare; фактическое размещение
+03.11.2026 выполнено через GitHub Pages, как описано ниже.
 
 ## GitHub Pages (текущий вариант)
 
 Репозиторий: https://github.com/Velheon/1c-professional-trainer
-Ожидаемый адрес: https://velheon.github.io/1c-professional-trainer/
+Адрес: https://velheon.github.io/1c-professional-trainer/
 
 Settings → Pages → Source: GitHub Actions. Workflow `.github/workflows/pages.yml`
 собирает `dist` с `VITE_BASE_PATH=/1c-professional-trainer/`, выполняет проверки
@@ -93,3 +93,7 @@ GitHub Pages не применяет Cloudflare `_headers`/`_redirects`. CSP в�
 Manifest использует относительные пути, service worker ограничен подпапкой сайта;
 очистка кеша не затрагивает другие приложения на том же домене.
 На новом адресе войдите тем же аккаунтом тренажёра и дождитесь синхронизации.
+
+Публикация подтверждена workflow 41651396576: build/deploy success.
+На размещённом сайте проверены HTTP 200, форма входа, доступность manifest/sw
+и отсутствие карточек вопросов без авторизации; ошибок JavaScript не обнаружено.
