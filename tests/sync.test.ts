@@ -167,3 +167,21 @@ it('upgrades the original IndexedDB schema without resetting attempts or identit
   expect(await upgraded.outbox.count()).toBe(0)
   expect(upgraded.verno).toBe(2)
 })
+
+it('sync preserves phone history but a new computer review reveals only its own checked attempt',async()=>{
+ const {visibleAttempt}=await import('../src/study/service')
+ const phone=await device(),computer=await device(),remote=new FakeCloud(),q=demoBank.questions[0]
+ const first=await startSession('sequential',q.section_id,[q.question_id],phone)
+ await submitAnswer(first,q.answers[0].answer_id,false,phone)
+ await synchronize(phone,owner,remote);await synchronize(computer,owner,remote)
+ const review=await startSession('review',null,[q.question_id],computer)
+ expect(visibleAttempt(review,q.question_id,await computer.attempts.toArray())).toBeUndefined()
+ expect(await computer.attempts.count()).toBe(1)
+ const answered=await submitAnswer(review,q.answers[4].answer_id,true,computer)
+ const current=visibleAttempt(answered,q.question_id,await computer.attempts.toArray())!
+ expect(current.session_id).toBe(review.session_id)
+ await synchronize(computer,owner,remote);await synchronize(phone,owner,remote)
+ expect(await phone.attempts.count()).toBe(2);expect(await computer.attempts.count()).toBe(2)
+ const fresh=await startSession('random',q.section_id,[q.question_id],phone)
+ expect(visibleAttempt(fresh,q.question_id,await phone.attempts.toArray())).toBeUndefined()
+})

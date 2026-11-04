@@ -14,5 +14,7 @@ export async function advance(session:Session,now=new Date(),database=db) {
   const counted=newlyAnswered?[...(session.counted_new_ids??[]),id]:(session.counted_new_ids??[])
   const since=session.new_since_review+Number(newlyAnswered)
   const review=session.mode==='sequential'?pickEmbedded(deriveReview(attempts,annotations),now,recent,since):undefined
-  return updateSession(session,{cursor:session.cursor+1,recent_ids:recent,new_since_review:since,counted_new_ids:counted,inserted_review_id:review??null},database)
+  const choices={...session.choices},attempt_ids={...session.attempt_ids},unsure_choices={...session.unsure_choices}
+  if(review){delete choices[review];delete attempt_ids[review];delete unsure_choices[review]}
+  return updateSession(session,{choices,attempt_ids,unsure_choices,cursor:session.cursor+1,recent_ids:recent,new_since_review:since,counted_new_ids:counted,inserted_review_id:review??null},database)
 }

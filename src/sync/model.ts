@@ -13,7 +13,7 @@ export const attemptSchema=z.object({attempt_id:uuid,user_id:uuid,question_id:uu
 export const annotationSchema=z.object({event_id:uuid,user_id:uuid,attempt_id:uuid,is_unsure:z.boolean(),changed_at:utc,device_id:uuid})
 export const sessionSchema=z.object({
   session_id:uuid,user_id:uuid,device_id:uuid,mode:z.enum(['sequential','random','review','exam']),section_id:uuid.nullable(),
-  question_ids:z.array(uuid).min(1),cursor:z.number().int().nonnegative(),choices:z.record(uuid,uuid),unsure_choices:z.record(uuid,z.boolean()).optional(),retry_ids:z.array(uuid),
+  question_ids:z.array(uuid).min(1),cursor:z.number().int().nonnegative(),choices:z.record(uuid,uuid),attempt_ids:z.record(uuid,uuid).optional(),unsure_choices:z.record(uuid,z.boolean()).optional(),retry_ids:z.array(uuid),
   version:z.number().int().positive(),status:z.enum(['active','paused','completed']),updated_at:utc,
   new_since_review:z.number().int().nonnegative(),counted_new_ids:z.array(uuid),recent_ids:z.array(uuid),inserted_review_id:uuid.nullable(),
   exam:z.object({started_at:utc,deadline_at:utc,finished_at:utc.optional(),choice_times:z.record(uuid,utc)}).optional(),

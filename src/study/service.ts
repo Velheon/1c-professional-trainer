@@ -41,6 +41,18 @@ export async function updateSession(session:Session, patch:Partial<Session>, dat
 export async function latestAttempt(question_id:string, database=db):Promise<Attempt|undefined> {
   return (await database.attempts.where('question_id').equals(question_id).toArray()).filter(a=>a.mode!=='exam').sort(compareEvents).at(-1)
 }
+// History determines knowledge; only this session's checked attempt reveals training feedback.
+export function visibleAttempt(session:Session,question_id:string,attempts:Attempt[]):Attempt|undefined {
+  if(session.retry_ids.includes(question_id))return
+  const history=attempts.filter(a=>a.question_id===question_id&&a.mode!=='exam'&&a.user_id===session.user_id).sort(compareEvents)
+  if(session.mode==='random'||session.mode==='review'||session.inserted_review_id===question_id) {
+    const id=session.attempt_ids?.[question_id]
+    if(id)return history.find(a=>a.attempt_id===id&&a.session_id===session.session_id)
+    // Compatibility with sessions saved before attempt_ids existed.
+    return session.choices[question_id]?history.filter(a=>a.session_id===session.session_id).at(-1):undefined
+  }
+  return history.at(-1)
+}
 export async function submitAnswer(session:Session, answer_id:string, is_unsure:boolean, database=db) {
   if(session.mode==='exam')throw new Error('Экзаменационные ответы проверяются после завершения')
   const question_id = currentId(session)
@@ -49,15 +61,15 @@ export async function submitAnswer(session:Session, answer_id:string, is_unsure:
     const q = await database.questions.get(question_id)
     const a = q?.answers.find(a=>a.answer_id===answer_id)
     if (!q || !a) throw new Error('Ответ не принадлежит вопросу')
-    const previous = await latestAttempt(question_id,database)
+    const previous = visibleAttempt(session,question_id,await database.attempts.where('question_id').equals(question_id).toArray())
     if (previous && !session.retry_ids.includes(question_id)) throw new Error('Для новой попытки нажмите «Ответить заново»')
     const attempt:Attempt = {attempt_id:crypto.randomUUID(),user_id:session.user_id,device_id:session.device_id,
-      question_id,answer_id,is_correct:a.is_correct,is_unsure,answered_at:now(),session_id:session.session_id,mode:session.mode}
+      question_id,answer_id,is_correct:a.is_correct,is_unsure,answered_at:now(),session_id:session.session_id,mode:session.inserted_review_id?'review':session.mode}
     await database.attempts.add(attempt)
     await enqueue(database,'attempt',attempt.attempt_id,attempt.user_id,attempt)
     const flag = await database.flags.get(question_id)
     if (flag?.skipped) {const updated={...flag,skipped:false,updated_at:now()};await database.flags.put(updated);await enqueue(database,'flag',updated.question_id,updated.user_id,updated)}
-    const next:Session = {...session,choices:{...session.choices,[question_id]:answer_id},
+    const next:Session = {...session,choices:{...session.choices,[question_id]:answer_id},attempt_ids:{...session.attempt_ids,[question_id]:attempt.attempt_id},
       retry_ids:session.retry_ids.filter(id=>id!==question_id),version:session.version+1,updated_at:now()}
     await database.sessions.put(next)
     await enqueue(database,'session',next.session_id,next.user_id,next)
@@ -88,7 +100,8 @@ export async function retryQuestion(session:Session,database=db) {
   const id = currentId(session)
   const choices = {...session.choices}; delete choices[id]
   const unsure_choices={...session.unsure_choices};delete unsure_choices[id]
-  return updateSession(session,{choices,unsure_choices,retry_ids:[...new Set([...session.retry_ids,id])]},database)
+  const attempt_ids={...session.attempt_ids};delete attempt_ids[id]
+  return updateSession(session,{choices,attempt_ids,unsure_choices,retry_ids:[...new Set([...session.retry_ids,id])]},database)
 }
 export async function move(session:Session,cursor:number,database=db) {
   return updateSession(session,{cursor:Math.max(0,Math.min(cursor,session.question_ids.length-1)),inserted_review_id:null},database)

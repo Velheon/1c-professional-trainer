@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, importBank } from './storage/db'
 import { readArchive } from './import/archive'
-import { activeSession, currentId, move, resumeSession, startSession, updateSession } from './study/service'
+import { activeSession, currentId, move, resumeSession, startSession, updateSession, visibleAttempt } from './study/service'
 import { compareEvents, effectiveUnsure, type Section } from './domain/model'
 import CloudBar from './cloud/CloudBar'
 import { useCloud } from './cloud/context'
@@ -61,9 +61,9 @@ export default function App() {
   const question=session ? data.questions.find(q=>q.question_id===currentId(session)) : undefined
   const answered=new Set(data.attempts.filter(a=>a.mode!=='exam').map(a=>a.question_id))
   const studying=!examSession && !home && session && session.status!=='completed' && question
-  const attempt=question ? data.attempts.filter(a=>a.question_id===question.question_id && a.mode!=='exam').sort(compareEvents).at(-1):undefined
+  const attempt=question ? visibleAttempt(session!,question.question_id,data.attempts):undefined
   const states=deriveReview(data.attempts,data.annotations)
-  const due=dueQuestions(states,clock)
+  const due=dueQuestions(states,new Date(Math.max(clock.getTime(),Date.now())))
   const flags=new Map(data.flags.map(f=>[f.question_id,f]))
   const latest=new Map([...data.attempts].filter(a=>a.mode!=='exam').sort(compareEvents).map(a=>[a.question_id,a]))
   const modes={sequential:'Изучение раздела',random:'Случайная тренировка',review:'Повторение',exam:'Пробный экзамен'}

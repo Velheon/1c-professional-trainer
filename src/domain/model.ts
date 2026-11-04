@@ -35,7 +35,7 @@ export interface Annotation {
 }
 export interface Session {
   session_id: string; user_id: string; device_id: string; mode: Mode; section_id: string | null;
-  question_ids: string[]; cursor: number; choices: Record<string,string>; unsure_choices?: Record<string,boolean>; retry_ids: string[];
+  question_ids: string[]; cursor: number; choices: Record<string,string>; attempt_ids?: Record<string,string>; unsure_choices?: Record<string,boolean>; retry_ids: string[];
   version: number; status: 'active'|'paused'|'completed'; updated_at: string;
   // Sequential progress is independent from inserted review questions.
   new_since_review: number; counted_new_ids: string[]; recent_ids: string[]; inserted_review_id: string | null;

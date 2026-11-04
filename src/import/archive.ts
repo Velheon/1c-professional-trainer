@@ -1,6 +1,7 @@
 import { unzip } from 'fflate'
 import { z } from 'zod'
 import { bankSchema, safeUrl, type Bank, type ImportReport, type StoredImage } from '../domain/model'
+import { validateAnswerNumbers } from './references'
 const PREFIX = 'platform_83/'
 const manifestSchema = z.array(z.object({ question_id: z.uuid(), original_file: z.string(), sha256: z.string(),
   frames: z.array(z.object({ file: z.string(), width: z.number().positive(), height: z.number().positive() })).min(1) }))
@@ -14,6 +15,7 @@ export function validateBank(value: unknown): Bank {
   let previousSection = 0
   for (const q of bank.questions) {
     unique(q.question_id)
+    validateAnswerNumbers(q)
     const s = sections.get(q.section_id)
     const position = (cursors.get(q.section_id) ?? 0)+1
     if (!s || q.section_order !== s.section_order || q.section_title !== s.section_title ||

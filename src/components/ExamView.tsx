@@ -31,7 +31,7 @@ export default function ExamView({session:s,questions,run,busy,onHome}:{session:
         const question=questions.find(q=>q.question_id===id)!,selected=s.choices[id],correct=question.answers.find(a=>a.is_correct)!,url=safeUrl(question.explanation_url)
         return <details className="exam-review question-card" key={id}><summary>{i+1}. {selected===correct.answer_id?'✓ Верно':selected?'× Ошибка':'— Без ответа'} · Раздел {question.section_order}, вопрос {question.question_order}</summary>
           <h2 className="question-text">{question.text}</h2>{question.image_pngs.map(path=><Illustration key={path} path={path}/>)}
-          <ol>{question.answers.map(a=><li key={a.answer_id} className={a.is_correct?'exam-correct':''}>{a.text}{a.is_correct?' · Верный ответ':''}{a.answer_id===selected?' · Ваш выбор':''}</li>)}</ol>
+          <ol>{question.answers.map(a=><li value={a.answer_code} key={a.answer_id} className={a.is_correct?'exam-correct':''}>{a.text}{a.is_correct?' · Верный ответ':''}{a.answer_id===selected?' · Ваш выбор':''}</li>)}</ol>
           <h3>Пояснение</h3><p className="preserve">{question.explanation||(url?'Пояснение в источнике':'В источнике нет пояснения.')}</p>{url&&<a href={url} target="_blank" rel="noopener noreferrer">Открыть пояснение в источнике ↗</a>}
         </details>
       })}
@@ -44,7 +44,7 @@ export default function ExamView({session:s,questions,run,busy,onHome}:{session:
       {q.image_pngs.map(path=><Illustration key={path} path={path}/>)}
       <div className="answers" role="group" aria-label="Варианты ответа">{q.answers.map((a,i)=><button ref={i===0?first:undefined} key={a.answer_id} className="answer" aria-pressed={s.choices[q.question_id]===a.answer_id} disabled={busy||remaining===0}
         onKeyDown={e=>{if(e.repeat&&(e.key==='Enter'||e.key===' '))e.preventDefault()}}
-        onClick={e=>{keyboard.current=e.detail===0;run(()=>chooseExam(s,a.answer_id))}}><span className="answer-indicator" aria-hidden="true">{s.choices[q.question_id]===a.answer_id?'●':'○'}</span><span className="answer-number">{a.answer_order}</span><span className="answer-text">{a.text}</span></button>)}</div>
+        onClick={e=>{keyboard.current=e.detail===0;run(()=>chooseExam(s,a.answer_id))}}><span className="answer-indicator" aria-hidden="true">{s.choices[q.question_id]===a.answer_id?'●':'○'}</span><span className="answer-number">{a.answer_code}</span><span className="answer-text">{a.text}</span></button>)}</div>
       <div className="study-dock"><span className="dock-hint">{s.choices[q.question_id]?'Выбор сохранён':'Можно пропустить и вернуться'}</span><button ref={next} className="primary" disabled={busy||remaining===0} onKeyDown={e=>{if(e.repeat&&(e.key==='Enter'||e.key===' '))e.preventDefault()}} onClick={()=>{keyboard.current=document.activeElement===next.current;run(()=>move(s,(s.cursor+1)%s.question_ids.length))}}>Следующий вопрос <span aria-hidden="true">→</span></button></div>
       <div className="bottom-nav"><button disabled={busy||s.cursor===0} onClick={()=>run(()=>move(s,s.cursor-1))}>← Назад</button></div>
     </article><aside className="navigator"><h3>Ответов: {Object.keys(s.choices).length} / 14</h3><div className="question-grid">{s.question_ids.map((id,i)=><button key={id} className={i===s.cursor?'current':''} aria-label={`Вопрос ${i+1}, ${s.choices[id]?'выбран ответ':'без ответа'}`} aria-current={i===s.cursor?'step':undefined} disabled={busy} onClick={()=>run(()=>move(s,i))}>{i+1}{s.choices[id]&&<span className="tiny">●</span>}</button>)}</div>
