@@ -1,3 +1,4 @@
+import { displayAnswers } from '../domain/display'
 import { useEffect, useRef, useState } from 'react'
 import { safeUrl, type Question, type Session } from '../domain/model'
 import { chooseExam, examResult, finishExam } from '../study/exam'
@@ -31,7 +32,7 @@ export default function ExamView({session:s,questions,run,busy,onHome}:{session:
         const question=questions.find(q=>q.question_id===id)!,selected=s.choices[id],correct=question.answers.find(a=>a.is_correct)!,url=safeUrl(question.explanation_url)
         return <details className="exam-review question-card" key={id}><summary>{i+1}. {selected===correct.answer_id?'✓ Верно':selected?'× Ошибка':'— Без ответа'} · Раздел {question.section_order}, вопрос {question.question_order}</summary>
           <h2 className="question-text">{question.text}</h2>{question.image_pngs.map(path=><Illustration key={path} path={path}/>)}
-          <ol>{question.answers.map(a=><li value={a.answer_code} key={a.answer_id} className={a.is_correct?'exam-correct':''}>{a.text}{a.is_correct?' · Верный ответ':''}{a.answer_id===selected?' · Ваш выбор':''}</li>)}</ol>
+          <ol>{displayAnswers(question).map(a=><li value={a.answer_code} key={a.answer_id} className={a.is_correct?'exam-correct':''}>{a.text}{a.is_correct?' · Верный ответ':''}{a.answer_id===selected?' · Ваш выбор':''}</li>)}</ol>
           <h3>Пояснение</h3><p className="preserve">{question.explanation||(url?'Пояснение в источнике':'В источнике нет пояснения.')}</p>{url&&<a href={url} target="_blank" rel="noopener noreferrer">Открыть пояснение в источнике ↗</a>}
         </details>
       })}
@@ -42,7 +43,7 @@ export default function ExamView({session:s,questions,run,busy,onHome}:{session:
     <div className="study-layout"><article className="question-card" ref={card} aria-labelledby="question-title">
       <div className="eyebrow">Раздел {q.section_order} · Вопрос {q.question_order}</div><h2 id="question-title" className="question-text">{q.text}</h2>
       {q.image_pngs.map(path=><Illustration key={path} path={path}/>)}
-      <div className="answers" role="group" aria-label="Варианты ответа">{q.answers.map((a,i)=><button ref={i===0?first:undefined} key={a.answer_id} className="answer" aria-pressed={s.choices[q.question_id]===a.answer_id} disabled={busy||remaining===0}
+      <div className="answers" role="group" aria-label="Варианты ответа">{displayAnswers(q).map((a,i)=><button ref={i===0?first:undefined} key={a.answer_id} className="answer" aria-pressed={s.choices[q.question_id]===a.answer_id} disabled={busy||remaining===0}
         onKeyDown={e=>{if(e.repeat&&(e.key==='Enter'||e.key===' '))e.preventDefault()}}
         onClick={e=>{keyboard.current=e.detail===0;run(()=>chooseExam(s,a.answer_id))}}><span className="answer-indicator" aria-hidden="true">{s.choices[q.question_id]===a.answer_id?'●':'○'}</span><span className="answer-number">{a.answer_code}</span><span className="answer-text">{a.text}</span></button>)}</div>
       <div className="study-dock"><span className="dock-hint">{s.choices[q.question_id]?'Выбор сохранён':'Можно пропустить и вернуться'}</span><button ref={next} className="primary" disabled={busy||remaining===0} onKeyDown={e=>{if(e.repeat&&(e.key==='Enter'||e.key===' '))e.preventDefault()}} onClick={()=>{keyboard.current=document.activeElement===next.current;run(()=>move(s,(s.cursor+1)%s.question_ids.length))}}>Следующий вопрос <span aria-hidden="true">→</span></button></div>

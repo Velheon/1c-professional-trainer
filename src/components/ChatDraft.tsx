@@ -1,7 +1,8 @@
+import { displayAnswers } from '../domain/display'
 import { useEffect, useRef, useState } from 'react'
 import type { Attempt, Question } from '../domain/model'
 export function buildDraft(q:Question,attempt?:Attempt,selected?:string) {
-  const lines=[`Помоги разобраться с вопросом 1С:Профессионал.`,`Раздел ${q.section_order}: ${q.section_title}`,`Вопрос ${q.question_order}; UUID: ${q.question_id}`,q.text,'',...q.answers.map(a=>`${a.answer_code}. ${a.text}`)]
+  const lines=[`Помоги разобраться с вопросом 1С:Профессионал.`,`Раздел ${q.section_order}: ${q.section_title}`,`Вопрос ${q.question_order}; UUID: ${q.question_id}`,q.text,'',...displayAnswers(q).map(a=>`${a.answer_code}. ${a.text}`)]
   if(q.image_attached) lines.push('К вопросу есть иллюстрация — приложу её вручную.')
   if(selected) lines.push(`Мой выбор: ${q.answers.find(a=>a.answer_id===selected)?.answer_code ?? 'не выбран'}`)
   if(attempt) lines.push(`Результат: ${attempt.is_correct?'верно':'ошибка'}`,`Верный вариант: ${q.answers.find(a=>a.is_correct)?.answer_code}`,`Пояснение источника: ${q.explanation}`,q.explanation_url)

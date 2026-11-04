@@ -22,8 +22,8 @@ test('Tab and Enter choose any answer, focus advances safely, held Enter does no
     await page.keyboard.press('Tab')
   }
   await expect(options.first()).toBeFocused()
-  for(let i=0;i<4;i++) await page.keyboard.press('Tab')
-  await expect(options.nth(4)).toBeFocused()
+  for(let i=0;i<3;i++) await page.keyboard.press('Tab')
+  await expect(options.nth(3)).toBeFocused()
   expect(await countAttempts(page)).toBe(0)
   await page.screenshot({path:'reports/keyboard-focus.png'})
   await page.keyboard.down('Enter')
@@ -56,7 +56,7 @@ test('mobile next button stays within thumb reach during scroll and never advanc
   await openStudy(page)
   const next=page.getByRole('button',{name:'Следующий вопрос',exact:true})
   await expect(next).toBeDisabled()
-  await page.locator('.answers button').nth(4).click()
+  await page.locator('.answers button').nth(3).click()
   await expect(next).toBeEnabled()
   await expect(page.locator('.study-bar')).toContainText('1 / 77')
   for(const at of [0,500,1200]) {

@@ -1,3 +1,4 @@
+import { displayAnswers } from '../domain/display'
 import { useEffect, useRef, useState } from 'react'
 import { db } from '../storage/db'
 import { safeUrl, type Annotation, type Attempt, type Flag, type Question, type Session } from '../domain/model'
@@ -77,7 +78,7 @@ export default function QuestionView({question:q,session,attempt,annotations,fla
     <p className="muted small">{viewing?'Ответ сохранён. Для новой попытки нажмите «Ответить заново».':'Выбор варианта сразу сохраняет ответ и показывает пояснение.'}</p>
     <p className="muted small">Номера вариантов — исходные коды. Ссылки «варианты 1 и 2» относятся к этим номерам.</p>
     <div className="answers" role="group" aria-label="Варианты ответа">
-      {q.answers.map((a,i)=><button type="button" key={a.answer_id} ref={i===0?firstAnswer:undefined}
+      {displayAnswers(q).map((a,i)=><button type="button" key={a.answer_id} ref={i===0?firstAnswer:undefined}
         className={`answer ${viewing && a.is_correct?'correct':''} ${viewing && selected===a.answer_id && !a.is_correct?'incorrect':''}`}
         value={a.answer_id} aria-pressed={selected===a.answer_id} disabled={viewing||busy}
         onKeyDown={e=> {if(e.key==='Enter'||e.key===' ') {if(e.repeat)e.preventDefault();else focusAfterAnswer.current=true}}}

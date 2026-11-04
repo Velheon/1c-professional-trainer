@@ -7,7 +7,7 @@ test('cloud client with synthetic API: explicit transfer, two devices, retry, lo
   await page.getByLabel('Импортировать архив',{exact:true}).setInputFiles(fixtureZip())
   await expect(page.locator('.section-card')).toHaveCount(2)
   await page.getByRole('button',{name:'Начать изучение'}).first().click()
-  await page.locator('.answers button').nth(4).click()
+  await page.locator('.answers button').nth(3).click()
   await expect(page.getByRole('heading',{name:'✓ Верно',exact:true})).toBeVisible()
   const original=(await attempts(page))[0]
   await login(page)

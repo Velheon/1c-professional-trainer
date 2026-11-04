@@ -35,7 +35,7 @@ test('production PWA reopens offline with private bank, queues answers, syncs on
   await login(page);await bind(page)
   await page.evaluate(async()=>{await navigator.serviceWorker.ready})
   await page.getByRole('button',{name:'Начать изучение'}).first().click()
-  await page.locator('.answers button').nth(4).click()
+  await page.locator('.answers button').nth(3).click()
   await expect(page.locator('.cloud-bar [role=status]')).toHaveText('Синхронизировано',{timeout:30_000})
   await page.getByRole('button',{name:'Следующий вопрос',exact:true}).click()
   await context.setOffline(true)

@@ -5,6 +5,7 @@ import { TrainerDB, importBank } from '../src/storage/db'
 import { move, retryQuestion, startSession, submitAnswer, visibleAttempt } from '../src/study/service'
 import { deriveReview } from '../src/study/planner'
 import { validateAnswerNumbers, answerReferences } from '../src/import/references'
+import { displayAnswers } from '../src/domain/display'
 import { demoBank } from './fixtures'
 const databases:TrainerDB[]=[]
 afterEach(async()=>{await Promise.all(databases.splice(0).map(d=>d.delete()))})
@@ -55,6 +56,7 @@ it.skipIf(!existsSync('platform_83_export.zip'))('archive references and keys ag
  const rawQs=new Map(raw.flatMap(s=>s.questions).map(q=>[q.uuid,q]))
  for(const q of bank.questions){validateAnswerNumbers(q);expect(q.answers.map(a=>[a.answer_id,a.answer_code,a.text,a.is_correct])).toEqual(rawQs.get(q.question_id)!.answers.map(a=>[a.uuid,a.code,a.text,a.true]))}
  const q=bank.questions.find(q=>q.question_id==='4e3ea63e-ea9d-11e9-b4e1-0050569f2c05')!
+ expect(displayAnswers(q).map(a=>a.answer_code)).toEqual([1,2,3,4,5,6])
  expect(q.answers.map(a=>a.answer_code)).toEqual([4,5,1,2,3,6])
  expect(answerReferences(q.answers.find(a=>a.is_correct)!.text)).toEqual([1,4])
  expect(q.answers.find(a=>a.answer_code===1)?.answer_order).toBe(3)
