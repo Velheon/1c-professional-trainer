@@ -1,28 +1,51 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, importBank } from './storage/db'
 import { readArchive } from './import/archive'
 import { activeSession, currentId, move, resumeSession, startSession, updateSession, visibleAttempt } from './study/service'
-import { compareEvents, effectiveUnsure, type Section } from './domain/model'
+import { type Question, type Section } from './domain/model'
 import CloudBar from './cloud/CloudBar'
 import { useCloud } from './cloud/context'
 import ThemeSwitcher from './components/ThemeSwitcher'
 import QuestionView from './components/QuestionView'
 import ChatDraft, { desktopChatAvailable } from './components/ChatDraft'
 import RandomDialog from './components/RandomDialog'
-import { deriveReview, dueQuestions } from './study/planner'
+import { deriveReview, dueQuestions, randomSelection, secureRandom } from './study/planner'
 import { advance } from './study/advance'
 import BackupPanel from './components/BackupPanel'
 import PwaPanel from './components/PwaPanel'
 import ExamView from './components/ExamView'
 import { startExam } from './study/exam'
+import StatisticsPage, { analyticsGroups, type QuestionGroup } from './components/StatisticsPage'
+import QuestionCollection from './components/QuestionCollection'
+import { buildStatistics } from './analytics/statistics'
+import { classifications } from './analytics/classification'
+import { classify } from './analytics/mechanisms'
+
 export default function App() {
   const cloud=useCloud()
-  const data=useLiveQuery(async()=> ({
-    sections:await db.sections.orderBy('section_order').toArray(),questions:await db.questions.toArray(),
-    attempts:await db.attempts.toArray(),annotations:await db.annotations.toArray(),flags:await db.flags.toArray(),
-    session:await activeSession(),sessions:await db.sessions.orderBy('updated_at').reverse().toArray(),report:(await db.meta.get('import'))?.value,
+  // Navigation updates only session data. History and bank reads have independent subscriptions.
+  const bank=useLiveQuery(async()=>({
+    sections:await db.sections.orderBy('section_order').toArray(),
+    questions:await db.questions.orderBy('[section_id+question_order]').toArray(),
   }),[])
+  const attempts=useLiveQuery(()=>db.attempts.toArray(),[])
+  const annotations=useLiveQuery(()=>db.annotations.toArray(),[])
+  const questionFlags=useLiveQuery(()=>db.flags.toArray(),[])
+  const sessions=useLiveQuery(async()=>({
+    session:await activeSession(),
+    sessions:await db.sessions.orderBy('updated_at').reverse().toArray(),
+  }),[])
+  const edits=useLiveQuery(()=>classifications(),[])
+  const stats=useMemo(()=>buildStatistics(attempts??[]),[attempts])
+  const states=useMemo(()=>deriveReview(attempts??[],annotations??[]),[attempts,annotations])
+  const flags=useMemo(()=>new Map(questionFlags?.map(f=>[f.question_id,f])),[questionFlags])
+  const automaticTags=useMemo(()=>new Map(bank?.questions.map(q=>[q.question_id,classify(q)])),[bank])
+  const tags=useMemo(()=>new Map([...automaticTags,...(edits??[])]),[automaticTags,edits])
+  const groups=useMemo(()=>analyticsGroups(bank?.questions??[],bank?.sections??[],tags),[bank,tags])
+  const data=bank&&attempts&&annotations&&questionFlags&&sessions&&edits?{...bank,...sessions,annotations,flags:questionFlags}:undefined
+  const [page,setPage]=useState<'study'|'statistics'|'favorites'|'group'>('study')
+  const [groupId,setGroupId]=useState('')
   const [home,setHome]=useState(false)
   const [examId,setExamId]=useState<string|null>(null)
   const [busy,setBusy]=useState(false)
@@ -50,6 +73,16 @@ export default function App() {
     void work().catch(e=>setError(e instanceof Error?e.message:'Не удалось сохранить действие. Повторите попытку.')).finally(()=> {lock.current=false;setBusy(false)})
   }
   function enterStudy() {setHome(false);setExamId(null);setNotice('')}
+  function navigate(next:'study'|'statistics'|'favorites'|'group') {
+    setPage(next);setHome(true);setChat(false);setNotice('')
+  }
+  function openGroup(group:QuestionGroup) {setGroupId(group.id);navigate('group')}
+  function trainCollection(items:Question[]) {
+    run(async()=>{
+      await startSession('random',null,randomSelection(items,states,'all','all',secureRandom))
+      enterStudy()
+    })
+  }
   async function importFile(file:File) {
     const result=await readArchive(new Uint8Array(await file.arrayBuffer()))
     const state=await importBank(result.bank,result.images,result.report)
@@ -59,13 +92,16 @@ export default function App() {
   const examSession=!home?(examId?data.sessions.find(s=>s.session_id===examId):data.session?.mode==='exam'?data.session:undefined):undefined
   const session=data.session
   const question=session ? data.questions.find(q=>q.question_id===currentId(session)) : undefined
-  const answered=new Set(data.attempts.filter(a=>a.mode!=='exam').map(a=>a.question_id))
+  const answered=stats.questions
   const studying=!examSession && !home && session && session.status!=='completed' && question
-  const attempt=question ? visibleAttempt(session!,question.question_id,data.attempts):undefined
-  const states=deriveReview(data.attempts,data.annotations)
-  const due=dueQuestions(states,new Date(Math.max(clock.getTime(),Date.now())))
-  const flags=new Map(data.flags.map(f=>[f.question_id,f]))
-  const latest=new Map([...data.attempts].filter(a=>a.mode!=='exam').sort(compareEvents).map(a=>[a.question_id,a]))
+  const questionHistory=question?stats.history.get(question.question_id)??[]:[]
+  const attempt=question?visibleAttempt(session!,question.question_id,questionHistory):undefined
+  const now=new Date(Math.max(clock.getTime(),Date.now()))
+  const due=dueQuestions(states,now)
+  const group=[...groups.sections,...groups.mechanisms].find(g=>g.id===groupId)
+  const collection=page==='favorites'?data.questions.filter(q=>flags.get(q.question_id)?.bookmarked):
+    group?data.questions.filter(q=>group.questionIds.has(q.question_id)):[]
+  collection.sort((a,b)=>a.section_order-b.section_order||a.question_order-b.question_order)
   const modes={sequential:'Изучение раздела',random:'Случайная тренировка',review:'Повторение',exam:'Пробный экзамен'}
   async function next() {
     if(!session) return
@@ -86,18 +122,26 @@ export default function App() {
     return (scope==='all'||q.section_id===scope) && (!value||q.text.toLocaleLowerCase('ru-RU').includes(value)||String(q.question_order)===value||`${q.section_order}.${q.question_order}`===value) &&
       (filter==='all'||filter==='new'&&!state||filter==='errors'&&state?.problematic||filter==='unsure'&&state&&!state.confidence||filter==='bookmarked'&&flag?.bookmarked||filter==='skipped'&&flag?.skipped)
   }).sort((a,b)=>a.section_order-b.section_order||a.question_order-b.question_order)
-  return <><header className="site-header"><div className="header-inner"><button className="brand" onClick={()=>setHome(true)} aria-label="На главную"><span className="brand-icon">1С</span><span>Практика<small>Профессионал · Платформа 8.3</small></span></button><div className="header-controls"><ThemeSwitcher/><CloudBar/></div></div></header>
+  return <><header className="site-header"><div className="header-inner"><button className="brand" onClick={()=>navigate('study')} aria-label="На главную"><span className="brand-icon">1С</span><span>Практика<small>Профессионал · Платформа 8.3</small></span></button><div className="header-controls"><ThemeSwitcher/><CloudBar/></div></div></header>
     <main>
+      {!studying&&!examSession&&<nav className="main-tabs" aria-label="Основная навигация">
+        {([['study','Обучение'],['statistics','Статистика'],['favorites','Избранное']] as const).map(([id,label])=>
+          <button key={id} aria-current={page===id?'page':undefined} onClick={()=>navigate(id)}>{label}</button>)}
+      </nav>}
       {error && <div role="alert" className="banner danger">{error}<button onClick={()=>setError('')} aria-label="Закрыть ошибку">×</button></div>}
       {notice && <div role="status" className="banner">{notice}<button onClick={()=>setNotice('')} aria-label="Закрыть уведомление">×</button></div>}
       {busy && <div className="busy" role="status">Сохраняем…</div>}
-      {examSession ? <ExamView key={examSession.session_id} session={examSession} questions={data.questions} run={run} busy={busy} onHome={()=>{setHome(true);setExamId(null)}}/> : studying ? <><nav className="study-bar"><button onClick={()=>setHome(true)}>← Все разделы</button><span><span className="mode-badge">{modes[session.mode]}</span> {session.cursor+1} / {session.question_ids.length}</span><button disabled={busy} onClick={()=>run(async()=> {await updateSession(session,{status:'completed'});setHome(true)})}>Завершить тренировку</button></nav>
-        <div className="study-layout"><div><QuestionView key={session.session_id+':'+question.question_id+':'+session.retry_ids.includes(question.question_id)} question={question} session={session} attempt={attempt} annotations={data.annotations} flag={data.flags.find(f=>f.question_id===question.question_id)} busy={busy} run={run} onNext={next} keyboardInput={keyboardInput.current} onChat={desktopChatAvailable()?()=>setChat(true):undefined}/>
+      {examSession ? <ExamView key={examSession.session_id} session={examSession} questions={data.questions} run={run} busy={busy} onHome={()=>{setHome(true);setExamId(null)}}/> : studying ? <><nav className="study-bar"><button onClick={()=>setHome(true)}>{page==='favorites'?'← Избранное':page==='group'?'← К подборке':'← Все разделы'}</button><span><span className="mode-badge">{modes[session.mode]}</span> {session.cursor+1} / {session.question_ids.length}</span><button disabled={busy} onClick={()=>run(async()=> {await updateSession(session,{status:'completed'});setHome(true)})}>Завершить тренировку</button></nav>
+        <div className="study-layout"><div><QuestionView key={session.session_id+':'+question.question_id+':'+session.retry_ids.includes(question.question_id)} question={question} session={session} attempt={attempt} history={questionHistory} classification={tags.get(question.question_id)} annotations={data.annotations} flag={data.flags.find(f=>f.question_id===question.question_id)} busy={busy} run={run} onNext={next} keyboardInput={keyboardInput.current} onChat={desktopChatAvailable()?()=>setChat(true):undefined}/>
           <div className="bottom-nav"><button disabled={session.cursor===0||busy} onClick={()=>run(()=>move(session,session.cursor-1))}>← Назад</button><button disabled={session.cursor===session.question_ids.length-1||busy} onClick={()=>run(()=>move(session,session.cursor+1))}>Далее →</button></div></div>
           <aside className="navigator"><h3>{session.mode==='sequential'?'Вопросы раздела':'Вопросы подборки'}</h3><p className="muted small">Можно вернуться к любому вопросу.</p><div className="question-grid">{session.question_ids.map((id,i)=> {
-            const a=latest.get(id); const unsure=a&&effectiveUnsure(a,data.annotations)
+            const state=states.get(id); const a=state?.last_attempt; const unsure=state&&!state.confidence
             return <button key={id} aria-label={`Вопрос ${i+1}${a?unsure?', не уверен':a.is_correct?', верно':', ошибка':flags.get(id)?.skipped?', пропущен':', не отвечал'}`} aria-current={i===session.cursor?'step':undefined} className={`${i===session.cursor?'current ':''}${a?unsure?'unsure':a.is_correct?'done':'wrong':flags.get(id)?.skipped?'skipped':''}`} disabled={busy} onClick={()=>run(()=>move(session,i))}>{i+1}{!a && flags.get(id)?.skipped && <span className="tiny">–</span>}{flags.get(id)?.bookmarked && <span className="tiny bookmark-dot">★</span>}{a && <span className="tiny">{unsure?'?':a.is_correct?'✓':'×'}</span>}</button>
           })}</div></aside></div></> : <>
+        {page==='statistics'?<StatisticsPage stats={stats} groups={groups} now={now} openGroup={openGroup}/>:
+         page==='favorites'||page==='group'?<QuestionCollection key={page+groupId} title={page==='favorites'?'Избранное':group?.title??'Вопросы'}
+           questions={collection} stats={stats} states={states} flags={flags} now={now} favorites={page==='favorites'} run={run} busy={busy}
+           open={id=>run(()=>openQuestion(id))} train={trainCollection}/>:<>
         <section className="welcome"><div><div className="eyebrow">Ваша подготовка к экзамену</div><h1>Разобраться.<br/><span>Запомнить. Сдать.</span></h1><p className="lead">Изучайте вопросы по порядку, разбирайте ответы<br className="desktop"/> и возвращайтесь к сложному в своём темпе.</p></div><div className="progress-card"><span className="eyebrow">Ваш прогресс</span><strong>{answered.size}<span> / {data.questions.length || '—'}</span></strong><progress value={answered.size} max={data.questions.length||1}/><p>вопросов изучено</p>{session && session.status!=='completed' && <button className="primary" onClick={()=>enterStudy()}>Продолжить обучение →</button>}</div></section>
         {!data.sections.length ? <section className="empty-state"><h2>Добавьте свой банк вопросов</h2><p>Выберите platform_83_export.zip. Он будет обработан в браузере и сохранён на этом устройстве.</p><label className="file-button primary">{busy?'Проверяем архив…':'Выбрать ZIP-архив'}<input aria-label="Импортировать архив" type="file" accept=".zip" disabled={busy} onChange={e=> {const file=e.target.files?.[0];if(file) run(()=>importFile(file));e.target.value=''}}/></label><p className="muted small">Архив и история не отправляются в интернет. Не очищайте данные браузера: пока они хранятся только локально.</p></section> : <>
           <div className="stats-row">
@@ -110,8 +154,8 @@ export default function App() {
           <details className="session-list"><summary>Результаты экзаменов ({data.sessions.filter(s=>s.mode==='exam'&&s.status==='completed').length})</summary>{data.sessions.filter(s=>s.mode==='exam'&&s.status==='completed').map(s=><button key={s.session_id} onClick={()=>{setExamId(s.session_id);setHome(false)}}>Пробный экзамен · {new Date(s.exam?.finished_at??s.updated_at).toLocaleString('ru-RU')}</button>)}</details>
           <div className="tools"><input type="search" aria-label="Поиск вопросов" placeholder="Найти вопрос по тексту или номеру…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Область поиска" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">Все разделы</option>{data.sections.map(s=><option value={s.section_id} key={s.section_id}>Раздел {s.section_order}</option>)}</select><select aria-label="Фильтр вопросов" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">Все вопросы</option><option value="new">Не отвечал</option><option value="errors">Проблемные / ошибки</option><option value="unsure">Неуверенные</option><option value="bookmarked">Отмеченные</option><option value="skipped">Пропущенные</option></select></div>
           {showResults && <section className="search-results" aria-label="Результаты поиска"><p className="muted small">Найдено: {results.length}</p>{results.slice(0,100).map(q=><button className="search-result" key={q.question_id} disabled={busy} onClick={()=>run(()=>openQuestion(q.question_id))}><span>{q.section_order}.{q.question_order}</span><div>{q.text}<small>{q.section_title}</small></div></button>)}{results.length>100&&<p className="muted small">Показаны первые 100. Уточните поиск.</p>}</section>}
-          <details className="session-list"><summary>Сохранённые тренировки ({data.sessions.filter(s=>s.status!=='completed').length})</summary>{data.sessions.filter(s=>s.status!=='completed').map(s=><button key={s.session_id} disabled={busy} onClick={()=>run(async()=> {await resumeSession(s);enterStudy()})}>{modes[s.mode]} · {s.section_id?`Раздел ${data.sections.find(x=>x.section_id===s.section_id)?.section_order}`:'Все разделы'} · {s.cursor+1}/{s.question_ids.length}</button>)}</details>
-          <div className="section-heading"><div><h2>Изучение по разделам</h2><p className="muted">Исходный порядок вопросов и вариантов сохранён.</p></div><label className="file-button">Повторный импорт<input type="file" aria-label="Повторный импорт" accept=".zip" disabled={busy} onChange={e=> {const file=e.target.files?.[0];if(file) run(()=>importFile(file));e.target.value=''}}/></label></div>
+
+          <div className="section-heading"><div><h2>Изучение по разделам</h2><p className="muted">Вопросы идут по разделу. Варианты расположены по исходным номерам.</p></div><label className="file-button">Повторный импорт<input type="file" aria-label="Повторный импорт" accept=".zip" disabled={busy} onChange={e=> {const file=e.target.files?.[0];if(file) run(()=>importFile(file));e.target.value=''}}/></label></div>
           <div className="sections">{data.sections.map(s=> {
             const qs=data.questions.filter(q=>q.section_id===s.section_id).sort((a,b)=>a.question_order-b.question_order)
             const count=qs.filter(q=>answered.has(q.question_id)).length
@@ -121,6 +165,7 @@ export default function App() {
               else {const next=await startSession('sequential',s.section_id,qs.map(q=>q.question_id));const first=qs.findIndex(q=>!answered.has(q.question_id));if(first>0) await move(next,first);enterStudy()}
             })}>{count?'Продолжить':'Начать изучение'} →</button>{count>0 && <button className="subtle" aria-label={`Начать раздел ${s.section_order} сначала`} disabled={busy} onClick={()=>run(async()=> {await startSession('sequential',s.section_id,qs.map(q=>q.question_id));enterStudy()})}>Сначала</button>}<button className="subtle" disabled={busy} onClick={()=>setRandomSection(s)}>Случайная тренировка</button></div></article>
           })}</div>
+        </>}
         </>}
       </>}
       {!studying&&!examSession&&<div className="maintenance-panels"><BackupPanel run={run} busy={busy}/></div>}

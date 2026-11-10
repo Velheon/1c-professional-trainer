@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import type { Annotation, Attempt, Flag, Session } from '../domain/model'
-export type MutableKind='session'|'flag'|'preferences'|'active'
+import { classificationSchema, type Classification } from '../analytics/mechanisms'
+export type MutableKind='session'|'flag'|'preferences'|'active'|'classification'
 export type EventKind=MutableKind|'attempt'|'annotation'
-export type Payload=Attempt|Annotation|Session|Flag|{theme:'dark'|'light'|'system'}|{session_id:string|null}
+export type Payload=Classification|Attempt|Annotation|Session|Flag|{theme:'dark'|'light'|'system'}|{session_id:string|null}
 export interface Outbox {key:string;event_id:string;user_id:string;kind:EventKind;entity_id:string;payload:Payload;created_at:string}
 export interface RemoteState {user_id:string;kind:MutableKind;entity_id:string;version:number;event_id:string;payload:Payload;updated_at:string}
 export interface Head {key:string;version:number;event_id:string}
@@ -28,6 +29,7 @@ export const sessionSchema=z.object({
   },'Некорректные параметры экзамена')
 const flagSchema=z.object({question_id:uuid,user_id:uuid,bookmarked:z.boolean(),skipped:z.boolean(),updated_at:utc})
 export function validatePayload(kind:MutableKind,value:unknown):Payload {
+  if(kind==='classification')return classificationSchema.parse(value)
   if(kind==='session')return sessionSchema.parse(value)
   if(kind==='flag')return flagSchema.parse(value)
   if(kind==='preferences')return z.object({theme:z.enum(['dark','light','system'])}).parse(value)

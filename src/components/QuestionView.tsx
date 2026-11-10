@@ -1,3 +1,5 @@
+import { AttemptHistory, MechanismEditor } from './QuestionDetails'
+import type { Classification } from '../analytics/mechanisms'
 import { displayAnswers } from '../domain/display'
 import { useEffect, useRef, useState } from 'react'
 import { db } from '../storage/db'
@@ -23,9 +25,9 @@ export function Illustration({path}: {path:string}) {
   return <><button className="illustration" onClick={()=>setLarge(true)} aria-label="Увеличить иллюстрацию"><img src={url} alt="Иллюстрация к вопросу"/></button>
     {large && <ImageDialog url={url} close={()=>setLarge(false)}/>}</>
 }
-export default function QuestionView({question:q,session,attempt,annotations,flag,run,busy,onNext,onChat,keyboardInput=false}: {
+export default function QuestionView({question:q,session,attempt,annotations,flag,run,busy,onNext,onChat,keyboardInput=false,history,classification}: {
   question:Question; session:Session; attempt?:Attempt; annotations:Annotation[]; flag?:Flag; run:Run; busy:boolean;
-  onNext?:()=>Promise<unknown>; onChat?:()=>void; keyboardInput?:boolean;
+  onNext?:()=>Promise<unknown>; onChat?:()=>void; keyboardInput?:boolean; history:Attempt[]; classification?:Classification;
 }) {
   const article=useRef<HTMLElement>(null)
   const scrollOnMount=useRef(!keyboardInput)
@@ -60,7 +62,7 @@ export default function QuestionView({question:q,session,attempt,annotations,fla
     function key(e:KeyboardEvent) {
       const target=e.target instanceof Element?e.target:null
       const answerFocused=!!target?.closest('button.answer')
-      if(e.repeat || e.altKey || e.ctrlKey || e.metaKey || e.isComposing || busy || target?.closest('input,textarea,select,a,[contenteditable],dialog,[role="dialog"]') || (!answerFocused&&target?.closest('button'))) return
+      if(e.repeat || e.altKey || e.ctrlKey || e.metaKey || e.isComposing || busy || target?.closest('input,textarea,select,a,summary,[contenteditable],dialog,[role="dialog"]') || (!answerFocused&&target?.closest('button'))) return
       const n=Number(e.key)
       const numbered=q.answers.find(a=>a.answer_code===n)
       if(!viewing && !!numbered) {e.preventDefault();focusAfterAnswer.current=true;run(()=>choose(numbered!.answer_id))}
@@ -103,6 +105,8 @@ export default function QuestionView({question:q,session,attempt,annotations,fla
       <div className="actions"><button disabled={busy} onClick={()=>run(()=>retryQuestion(session))}>Ответить заново</button>{onChat && <button onClick={onChat}>Разобрать с ChatGPT</button>}</div>
       <p className="muted small">Просмотр последнего ответа · {new Date(attempt.answered_at).toLocaleString('ru-RU')}</p>
     </section>}
+    <AttemptHistory attempts={history}/>
+    {classification&&<MechanismEditor questionId={id} value={classification} run={run} busy={busy}/>}
     <footer className="question-footer"><span>Код вопроса {q.question_code}</span><details><summary>Идентификатор</summary><code>{q.question_id}</code></details></footer>
   </article>
 }

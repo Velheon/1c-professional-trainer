@@ -12,7 +12,12 @@ class AuthDB extends Dexie {
 const authDB=new AuthDB()
 const enabled=!!url&&!!key&&!configurationError&&!(localHost&&import.meta.env.VITE_LOCAL_ONLY==='true')
 export const projectUrl=url
-export const supabase=enabled?createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storage:{
+function boundedFetch(input:RequestInfo|URL, init?:RequestInit) {
+  const timeout=AbortSignal.timeout(12_000)
+  const callerSignal=init?.signal??(input instanceof Request?input.signal:null)
+  return fetch(input,{...init,signal:callerSignal?AbortSignal.any([callerSignal,timeout]):timeout})
+}
+export const supabase=enabled?createClient(url,key,{global:{fetch:boundedFetch},db:{retry:false},auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storage:{
   getItem:async k=>(await authDB.tokens.get(k))?.value??null,
   setItem:async(k,v)=>{await authDB.tokens.put({key:k,value:v})},
   removeItem:async k=>{await authDB.tokens.delete(k)},

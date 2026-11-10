@@ -26,7 +26,7 @@ export default function BackupPanel({run,busy}:{run:Run;busy:boolean}) {
       <p>Новых попыток: {preview.newAttempts}. Уже есть: {preview.existingAttempts}. Новых отметок уверенности: {preview.newAnnotations}. Новых тренировок: {preview.newSessions}.</p>
       <p>Отличаются сохранённые тренировки: {preview.sessionConflicts}; отметки вопросов: {preview.flagConflicts}.</p>
       <label>Существующие тренировки, отметки и тема<select value={policy} onChange={e=>setPolicy(e.target.value as RestorePolicy)}><option value="keep">Сохранить текущие</option><option value="restore">Восстановить из копии</option></select></label>
-      <p className="muted small">Попытки объединятся по UUID при любом выборе. Сессии из копии можно продолжить через список сохранённых тренировок. Завершённые экзамены не открываются заново. Текущая тренировка не переключится.</p>
+      <p className="muted small">Попытки объединятся по UUID при любом выборе. Разделы из копии можно продолжить на главной. Завершённые экзамены не открываются заново. Текущая тренировка не переключится.</p>
       <div className="actions"><button className="primary" disabled={busy} onClick={()=>run(async()=> {const result=await restoreHistory(backup,policy);setBackup(null);setPreview(null);setMessage(`Восстановление завершено. Добавлено попыток: ${result.newAttempts}. Существующая история сохранена.`)})}>Объединить историю</button><button disabled={busy} onClick={()=>{setBackup(null);setPreview(null)}}>Отмена импорта</button></div>
     </section>}
     {message&&<p role="status">{message}</p>}

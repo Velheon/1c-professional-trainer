@@ -42,8 +42,7 @@ test('production PWA reopens offline with private bank, queues answers, syncs on
   // Routes are bypassed in offline mode to exercise real network failure.
   await context.unroute('https://**.supabase.co/**')
   await page.reload()
-  await expect(page.getByRole('button',{name:'Продолжить офлайн на этом устройстве',exact:true})).toBeVisible({timeout:30_000})
-  await page.getByRole('button',{name:'Продолжить офлайн на этом устройстве',exact:true}).click()
+  await expect(page.locator('.cloud-bar [role=status]')).toContainText('Работа без сети',{timeout:30_000})
   await expect(page.locator('.answers button')).toHaveCount(5)
   await page.locator('.answers button').first().click()
   expect(await attempts(page)).toHaveLength(2)
@@ -57,7 +56,7 @@ test('production PWA reopens offline with private bank, queues answers, syncs on
   const reopened=await context.newPage()
   await page.close()
   await reopened.goto(base)
-  await reopened.getByRole('button',{name:'Продолжить офлайн на этом устройстве',exact:true}).click()
+  await expect(reopened.locator('.cloud-bar [role=status]')).toContainText('Работа без сети',{timeout:30_000})
   expect(await attempts(reopened)).toHaveLength(2)
   await api.connect(context);await context.setOffline(false)
   await reopened.getByRole('button',{name:'Повторить синхронизацию',exact:true}).click()

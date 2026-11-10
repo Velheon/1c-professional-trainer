@@ -2,6 +2,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises'
 const migrations=[
   ['public.app_members','supabase/migrations/202611030001_initial.sql','migration_one'],
   ['public.user_sync_state','supabase/migrations/202611030002_cloud_sync.sql','migration_two'],
+  ['public.question_classification','supabase/migrations/202611100003_question_classification.sql','migration_three'],
 ]
 let sql='-- Personal trainer setup. Run in the SQL Editor of your own Supabase project.\n-- Does not drop tables, overwrite history, or expose the bank publicly.\nbegin;\n'
 for(const [marker,path,tag] of migrations) {

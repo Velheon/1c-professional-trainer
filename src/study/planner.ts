@@ -1,5 +1,4 @@
 import { compareEvents, type Annotation, type Attempt, type Question } from '../domain/model'
-import { effectiveUnsure } from '../domain/model'
 export interface ReviewState {
   question_id:string; ever_answered:boolean; last_answer_correct:boolean; confidence:boolean;
   review_stage:number; due_at:string; mastered:boolean; problematic:boolean; last_attempt:Attempt;
@@ -8,9 +7,12 @@ const DAY=86_400_000
 export const INTERVAL_DAYS=[1,3,7,14,30,60]
 export function deriveReview(attempts:Attempt[],annotations:Annotation[]):Map<string,ReviewState> {
   const result=new Map<string,ReviewState>()
+  const latestNotes=new Map([...annotations]
+    .sort((a,b)=>a.changed_at.localeCompare(b.changed_at)||a.event_id.localeCompare(b.event_id))
+    .map(a=>[a.attempt_id,a.is_unsure]))
   for(const a of [...attempts].filter(a=>a.mode!=='exam').sort(compareEvents)) {
     const previous=result.get(a.question_id)
-    const unsure=effectiveUnsure(a,annotations)
+    const unsure=latestNotes.get(a.attempt_id)??a.is_unsure
     const stage=!a.is_correct?0:unsure?(previous?.review_stage??0):Math.min((previous?.review_stage??0)+1,INTERVAL_DAYS.length)
     const interval=!a.is_correct?0:unsure?Math.min(INTERVAL_DAYS[Math.max(0,stage-1)],1):INTERVAL_DAYS[stage-1]
     result.set(a.question_id,{question_id:a.question_id,ever_answered:true,last_answer_correct:a.is_correct,confidence:!unsure,

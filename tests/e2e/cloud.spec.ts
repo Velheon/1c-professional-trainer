@@ -9,6 +9,12 @@ test('cloud client with synthetic API: explicit transfer, two devices, retry, lo
   await page.getByRole('button',{name:'Начать изучение'}).first().click()
   await page.locator('.answers button').nth(3).click()
   await expect(page.getByRole('heading',{name:'✓ Верно',exact:true})).toBeVisible()
+  await page.getByText('Механизмы 1С',{exact:true}).click()
+  await page.getByRole('button',{name:'Изменить теги'}).click()
+  await page.getByLabel('Основной механизм').selectOption('access')
+  await page.getByRole('button',{name:'Сохранить теги'}).click()
+  await expect(page.getByText('Права доступа и роли',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Добавить закладку'}).click()
   const original=(await attempts(page))[0]
   await login(page)
   await expect(page.getByRole('checkbox',{name:/Привязать этот браузер/})).toBeVisible()
@@ -27,6 +33,9 @@ test('cloud client with synthetic API: explicit transfer, two devices, retry, lo
   await b.getByRole('button',{name:'Продолжить здесь',exact:true}).click()
   await expect(b.getByRole('heading',{name:'✓ Верно',exact:true})).toBeVisible()
   expect(await attempts(b)).toHaveLength(1)
+  await expect(b.getByRole('button',{name:'Убрать закладку'})).toBeVisible()
+  await b.getByText('Механизмы 1С',{exact:true}).click()
+  await expect(b.getByText('Права доступа и роли',{exact:true})).toBeVisible()
   await b.getByRole('button',{name:'Ответить заново',exact:true}).click()
   await b.locator('.answers button').first().click()
   await expect(b.locator('.cloud-bar [role=status]')).toHaveText('Синхронизировано',{timeout:30_000})
@@ -58,4 +67,46 @@ test('cloud client with synthetic API: explicit transfer, two devices, retry, lo
   await expect(page.getByRole('checkbox',{name:/Привязать этот браузер/})).toHaveCount(0)
   expect(await attempts(page)).toHaveLength(2)
   await second.close()
+})
+
+
+test('mobile network stall keeps authorized local study available and explicit refusal revokes it',async({page})=>{
+  const api=new SyntheticAPI()
+  await api.connect(page.context())
+  await page.setViewportSize({width:393,height:851})
+  await page.goto('/')
+  await page.getByLabel('Импортировать архив',{exact:true}).setInputFiles(fixtureZip())
+  await login(page);await bind(page)
+  const checks=api.membershipRequests
+  await page.evaluate(()=>{
+    for(let i=0;i<5;i++)document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await expect(page.locator('.section-card')).toHaveCount(2)
+  expect(api.membershipRequests).toBe(checks)
+
+  let release!:()=>void
+  api.membershipBarrier=new Promise<void>(resolve=>{release=resolve})
+  try {
+    await page.reload()
+    expect(await page.evaluate(()=>navigator.onLine)).toBe(true)
+    await expect(page.locator('.cloud-bar [role=status]')).toContainText('Работа без сети',{timeout:18_000})
+    await page.getByRole('button',{name:'Начать изучение'}).first().click()
+    await page.locator('.answers button').first().click()
+    await expect(page.getByText('Требует повторения',{exact:true})).toBeVisible()
+    expect(await attempts(page)).toHaveLength(1)
+  } finally {
+    api.membershipBarrier=null
+    release()
+  }
+  api.memberEnabled=false
+  await page.locator('.cloud-actions').getByRole('button',{name:'Повторить синхронизацию'}).click()
+  await expect(page.getByText('Аккаунт отсутствует в списке доступа к банку.')).toBeVisible()
+  await expect(page.locator('.answers button')).toHaveCount(0)
+  // Keep the dev server reachable while exercising the cached-access path.
+  // The production PWA test covers a real offline navigation.
+  await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}))
+  await page.reload()
+  await expect(page.locator('.auth-screen')).toBeVisible()
+  await expect(page.locator('.section-card,.answers button')).toHaveCount(0)
+  expect(await attempts(page)).toHaveLength(1)
 })

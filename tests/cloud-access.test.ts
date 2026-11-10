@@ -26,6 +26,7 @@ beforeEach(async()=> {
     insert into auth.users values('${owner}'),('${other}');`)
   await pg.exec(readFileSync('supabase/migrations/202611030001_initial.sql','utf8'))
   await pg.exec(readFileSync('supabase/migrations/202611030002_cloud_sync.sql','utf8'))
+  await pg.exec(readFileSync('supabase/migrations/202611100003_question_classification.sql','utf8'))
   await pg.query('insert into public.app_members(user_id) values($1)',[owner])
 },30_000)
 afterEach(async()=>{await pg.close()})
@@ -95,3 +96,22 @@ it('generated setup works from an empty project, retries preserve history and ne
     expect((await fresh.query('select public from storage.buckets')).rows).toEqual([{public:false}])
   }finally{await fresh.close()}
 },30_000)
+
+it('shared classification is member-only, validated and versioned without modifying the bank',async()=>{
+  await install()
+  const id=demoBank.questions[0].question_id
+  const change=(user:string,version:number,payload:unknown)=>as('authenticated',user,
+    'select public.save_question_classification($1,$2,$3,$4::jsonb)',[id,version,event,JSON.stringify(payload)])
+  const valid={primary:'catalogs',additional:['forms']}
+  await expect(change(other,0,valid)).rejects.toThrow('MEMBERSHIP_REQUIRED')
+  await expect(change(owner,0,{primary:'catalogs',additional:['catalogs']})).rejects.toThrow('INVALID_CLASSIFICATION')
+  expect((await change(owner,0,valid)).rows).toEqual([{save_question_classification:1}])
+  await expect(change(owner,0,valid)).rejects.toThrow('SYNC_CONFLICT')
+  expect((await change(owner,1,{primary:'forms',additional:[]})).rows).toEqual([{save_question_classification:2}])
+  expect((await as('authenticated',other,'select * from public.question_classification')).rows).toHaveLength(0)
+  await expect(as('anon','','select * from public.question_classification')).rejects.toThrow('permission denied')
+  await expect(as('authenticated',owner,'update public.question_classification set version=1')).rejects.toThrow('permission denied')
+  expect((await as('authenticated',owner,'select payload from public.question_classification')).rows)
+    .toEqual([{payload:{primary:'forms',additional:[]}}])
+  expect((await pg.query('select source from public.bank_source')).rows).toEqual([{source}])
+})

@@ -18,6 +18,11 @@ export class SyntheticAPI {
   constructor(private acceptProductionHost=false) {}
   source:unknown=null;report:unknown=null
   logoutBarrier:Promise<void>|null=null
+  membershipBarrier:Promise<void>|null=null
+  memberEnabled=true
+  membershipRequests=0
+  tags:Record<string,Record<string,unknown>>={}
+
   attempts:Record<string,Record<string,unknown>>={};annotations:Record<string,Record<string,unknown>>={};states:Record<string,Record<string,unknown>>={}
   async connect(context:BrowserContext) {
     await context.route('https://**.supabase.co/**',route=>this.handle(route))
@@ -35,7 +40,11 @@ export class SyntheticAPI {
       return data({access_token:fakeToken(id),refresh_token:'synthetic-refresh',expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id,aud:'authenticated',role:'authenticated',email:body.email,app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00.000Z'}})
     }
     if(url.pathname==='/auth/v1/logout'){await this.logoutBarrier;return data({})}
-    if(url.pathname==='/rest/v1/app_members')return data(uid===owner?[{user_id:owner}]:[])
+    if(url.pathname==='/rest/v1/app_members'){
+      this.membershipRequests++
+      await this.membershipBarrier
+      return data(uid===owner&&this.memberEnabled?[{user_id:owner}]:[])
+    }
     if(uid!==owner)return data({message:'Forbidden'},403)
     if(url.pathname==='/rest/v1/bank_source')return data(this.source?[{source:this.source,report:this.report}]:[])
     if(url.pathname==='/rest/v1/rpc/install_bank') {
@@ -48,6 +57,17 @@ export class SyntheticAPI {
       if((old?.version??0)!==body.p_expected_version)return data({message:'SYNC_CONFLICT',code:'P0001'},400)
       const version=body.p_expected_version+1
       this.states[key]={user_id:owner,kind:body.p_kind,entity_id:body.p_entity_id,version,event_id:body.p_event_id,payload:body.p_payload,updated_at:new Date().toISOString()}
+      return data(version)
+    }
+    if(url.pathname==='/rest/v1/question_classification'){
+      return data(Object.values(this.tags).filter(row=>!url.searchParams.has('question_id')||url.searchParams.get('question_id')==='eq.'+row.question_id))
+    }
+    if(url.pathname==='/rest/v1/rpc/save_question_classification'){
+      const body=request.postDataJSON() as {p_question_id:string;p_expected_version:number;p_event_id:string;p_payload:unknown}
+      const old=this.tags[body.p_question_id]
+      if((old?.version??0)!==body.p_expected_version)return data({message:'SYNC_CONFLICT',code:'P0001'},400)
+      const version=body.p_expected_version+1
+      this.tags[body.p_question_id]={question_id:body.p_question_id,version,event_id:body.p_event_id,payload:body.p_payload,updated_at:new Date().toISOString()}
       return data(version)
     }
     if(url.pathname==='/rest/v1/user_sync_state') {

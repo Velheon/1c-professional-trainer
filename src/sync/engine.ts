@@ -1,3 +1,4 @@
+import { classificationSchema } from '../analytics/mechanisms'
 import type { Annotation, Attempt, Flag, Session } from '../domain/model'
 import type { TrainerDB } from '../storage/db'
 import { annotationSchema, attemptSchema, canonical, keyOf, validatePayload, type Binding, type Conflict, type MutableKind, type Outbox, type Payload, type RemoteState } from './model'
@@ -34,6 +35,9 @@ export async function bindAccount(database:TrainerDB,user_id:string,project_url:
     for(const a of ownedAnnotations)await add('annotation',a.event_id,a)
     for(const s of ownedSessions)await add('session',s.session_id,s)
     for(const f of ownedFlags)await add('flag',f.question_id,f)
+    for(const row of await database.meta.where('key').startsWith('classification:').toArray()) {
+      await add('classification',row.key.slice('classification:'.length),classificationSchema.parse(row.value))
+    }
     const active=(await database.meta.get('activeSession'))?.value
     if(typeof active==='string')await add('active','active',{session_id:active})
     const theme=(await database.meta.get('theme'))?.value
@@ -78,6 +82,9 @@ async function applyPayload(database:TrainerDB,remote:RemoteState) {
     const f=p as Flag
     if(f.user_id!==remote.user_id||f.question_id!==remote.entity_id||!await database.questions.get(f.question_id))throw new Error('Некорректная отметка вопроса')
     await database.flags.put(f)
+  } else if(remote.kind==='classification') {
+    if(!await database.questions.get(remote.entity_id))throw new Error('Не найден вопрос для классификации')
+    await database.meta.put({key:keyOf('classification',remote.entity_id),value:p})
   } else if(remote.kind==='preferences') {
     await database.meta.put({key:'theme',value:(p as {theme:string}).theme})
   } else {
@@ -137,7 +144,7 @@ export async function resolveConflict(database:TrainerDB,conflict:Conflict,choic
     await database.conflicts.delete(conflict.key)
   })
 }
-const priorities:Record<Outbox['kind'],number>={attempt:0,annotation:1,session:2,flag:3,preferences:4,active:5}
+const priorities:Record<Outbox['kind'],number>={attempt:0,annotation:1,session:2,flag:3,preferences:4,active:5,classification:6}
 const running=new WeakSet<TrainerDB>()
 export async function synchronize(database:TrainerDB,user_id:string,transport:SyncTransport) {
   if(running.has(database))return
